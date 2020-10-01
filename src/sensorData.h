@@ -1,3 +1,5 @@
+HomieNode doorNode("door", "door", "endstop");
+HomieNode waterNode("water", "water", "endstop");
 
 const int PIN_DOOR = 1;
 const int PIN_WATER = 2;

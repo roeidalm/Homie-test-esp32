@@ -1,3 +1,11 @@
+// HomieNode shuttersNode("shutters", "Shutters", "shutters");
+HomieNode shutterOpenNode("shutterOpenNode", "ShutterOpenNode", "switch");
+HomieNode shutterCloseNode("shutterCloseNode", "ShutterCloseNode", "switch");
+HomieNode abortNode("abortNode", "AbortNode", "switch");
+
+bool RELAY_OPEN = false;
+bool RELAY_CLOSE = false;
+
 void shuttersHalt()
 {
     RELAY_OPEN = false;

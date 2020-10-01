@@ -1,15 +1,14 @@
 #include <Homie.h>
-#include <IRremote.h>
-#include "dataMembers.h"
 #include "secTask.h"
 #include "TVrack.h"
 #include "sensorData.h"
-// #include <EEPROM.h>
-// const unsigned long COURSE_TIME = 30 * 1000;
-// const float CALIBRATION_RATIO = 0.1;
-//const byte SHUTTERS_EEPROM_POSITION = 0;
 
-// Shutters
+#if defined(ESP32)
+#include "bleRemote.h"
+#define bleremote true
+#else
+#define bleremote false
+#endif
 
 bool sleepFlag = false;
 
@@ -66,8 +65,11 @@ void advertiseSetup()
   shutterOpenNode.advertise("on").setName("On").setDatatype("boolean").settable(RelayOpenOnHandler);
   shutterCloseNode.advertise("on").setName("On").setDatatype("boolean").settable(RelayCloseOnHandler);
   abortNode.advertise("on").setName("On").setDatatype("boolean").settable(AbortRelayOnHandler);
+  if (bleremote)
+  {
+    //TODO Set the advertise or the function for this
+  }
 }
-
 void setup()
 {
   // EEPROM.begin(4);
@@ -87,6 +89,8 @@ void setup()
 
   Homie.disableResetTrigger();
   sensorSetup();
+  if (bleremote)
+    bleRemoteSetup();
   Homie_setFirmware("my-sensors", "1.0.0");
   Homie.setLoopFunction(loopHandler);
   Homie.onEvent(onHomieEvent);
