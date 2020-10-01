@@ -1,33 +1,16 @@
-/*
-
-# Homie enabled Sonoff Dual shutters
-
-Requires the Shutters library:
-https://github.com/marvinroger/arduino-shutters
-and the SonoffDual library:
-https://github.com/marvinroger/arduino-sonoff-dual
-
-## Features
-
-* Do a short press to close shutters
-if level != 0 or open shutters if level == 0
-* Do a long press to reset
-
-*/
-
 #include <Homie.h>
+#include <IRremote.h>
 
-#include <EEPROM.h>
-
-const unsigned long COURSE_TIME = 30 * 1000;
-const float CALIBRATION_RATIO = 0.1;
+// #include <EEPROM.h>
+// const unsigned long COURSE_TIME = 30 * 1000;
+// const float CALIBRATION_RATIO = 0.1;
+//const byte SHUTTERS_EEPROM_POSITION = 0;
 
 bool RELAY_OPEN = false;
 bool RELAY_CLOSE = false;
 
 const int PIN_DOOR = 1;
 const int PIN_WATER = 2;
-const byte SHUTTERS_EEPROM_POSITION = 0;
 const int LED_PIN = 5;
 
 bool sleepFlag = false;
@@ -38,49 +21,28 @@ Bounce debouncer_water = Bounce(); // Bounce is built into Homie, so you can use
 int lastDoorValue = -1;
 int lastWaterValue = -1;
 
-HomieNode doorNode("door", "door", "door");
-HomieNode waterNode("water", "water", "water");
+HomieNode doorNode("door", "door", "endstop");
+HomieNode waterNode("water", "water", "endstop");
 
 // HomieNode shuttersNode("shutters", "Shutters", "shutters");
 HomieNode shutterOpenNode("shutterOpenNode", "ShutterOpenNode", "switch");
 HomieNode shutterCloseNode("shutterCloseNode", "ShutterCloseNode", "switch");
+HomieNode abortNode("abortNode", "AbortNode", "switch");
+
+#if defined(ESP32)
+int IR_RECEIVE_PIN = 15;
+#else
+int IR_RECEIVE_PIN = 11;
+#endif
+IRrecv irrecv(IR_RECEIVE_PIN);
+decode_results results;
 
 // Shutters
-
-void shuttersOpen()
-{
-  RELAY_OPEN = true;
-}
-
-void shuttersClose()
-{
-  RELAY_CLOSE = true;
-}
-
 void shuttersHalt()
 {
   RELAY_OPEN = false;
   RELAY_CLOSE = false;
 }
-
-// uint8_t shuttersGetState()
-// {
-//   return EEPROM.read(SHUTTERS_EEPROM_POSITION);
-// }
-
-// void shuttersSetState(uint8_t state)
-// {
-//   EEPROM.write(SHUTTERS_EEPROM_POSITION, state);
-//   EEPROM.commit();
-// }
-
-// void onShuttersLevelReached(uint8_t level)
-// {
-//   if (shutters.isIdle())
-//     Homie.setIdle(true); // if idle, we've reached our target
-//   if (Homie.isConnected())
-//     shuttersNode.setProperty("level").send(String(level));
-// }
 
 void reset()
 {
@@ -96,14 +58,8 @@ void onHomieEvent(const HomieEvent &event)
   case HomieEventType::ABOUT_TO_RESET:
     reset();
     break;
-    // case HomieEventType::MQTT_READY:
-    //   Homie.getLogger() << "MQTT connected, preparing for deep sleep..." << endl;
-    //   Homie.prepareToSleep();
-    //   break;
-    // case HomieEventType::READY_TO_SLEEP:
-    //   Homie.getLogger() << "Ready to sleep" << endl;
-    //   Homie.doDeepSleep();
-    //   break;
+  default:
+    break;
   }
 }
 
@@ -163,13 +119,54 @@ bool RelayCloseOnHandler(const HomieRange &range, const String &value)
 
   return true;
 }
+bool AbortRelayOnHandler(const HomieRange &range, const String &value)
+{
+  if (value != "true" && value != "false")
+    return false;
+
+  if (value == "true")
+  {
+    shuttersHalt();
+    shutterOpenNode.setProperty("on").send(value);
+    shutterCloseNode.setProperty("on").send(value);
+    Homie.getLogger() << "!!!ABORT!!!" << endl;
+  }
+
+  return true;
+}
+
+TaskHandle_t Task1;
+void Task1code(void *parameter)
+{
+  for (;;)
+  {
+    if (irrecv.decode(&results))
+    {
+      Homie.getLogger() << "recieve IR: " << results.value << endl;
+
+      irrecv.resume(); // Receive the next value
+    }
+    delay(100);
+  }
+}
+
 void setup()
 {
-  EEPROM.begin(4);
+  // EEPROM.begin(4);
 
   Serial.begin(115200);
   Serial << endl
          << endl;
+
+  xTaskCreatePinnedToCore(
+      Task1code, /* Function to implement the task */
+      "Task1",   /* Name of the task */
+      10000,     /* Stack size in words */
+      NULL,      /* Task input parameter */
+      0,         /* Priority of the task */
+      &Task1,    /* Task handle. */
+      0);        /* Core where the task should run */
+
   Homie.disableResetTrigger();
   pinMode(LED_PIN, INPUT);
   digitalWrite(LED_PIN, HIGH);
@@ -187,6 +184,7 @@ void setup()
   waterNode.advertise("clear");
   shutterOpenNode.advertise("on").setName("On").setDatatype("boolean").settable(RelayOpenOnHandler);
   shutterCloseNode.advertise("on").setName("On").setDatatype("boolean").settable(RelayCloseOnHandler);
+  abortNode.advertise("on").setName("On").setDatatype("boolean").settable(AbortRelayOnHandler);
 
   Homie.onEvent(onHomieEvent);
   Homie.setup();
@@ -195,9 +193,4 @@ void setup()
 void loop()
 {
   Homie.loop();
-  // if (false)
-  // {
-  //   Homie.reset();
-  //   Homie.setIdle(false);
-  // }
 }
