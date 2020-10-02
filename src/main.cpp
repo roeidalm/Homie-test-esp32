@@ -1,6 +1,6 @@
 #include <Homie.h>
 #include "secTask.h"
-#include "TVrack.h"
+#include "TVRack.h"
 #include "sensorData.h"
 
 #if defined(ESP32)
@@ -9,8 +9,6 @@
 #else
 #define bleremote false
 #endif
-
-bool sleepFlag = false;
 
 void onHomieEvent(const HomieEvent &event)
 {
@@ -27,25 +25,9 @@ void onHomieEvent(const HomieEvent &event)
 void loopHandler()
 {
 
-  int doorValue = debouncer_door.read();
-  int waterValue = debouncer_water.read();
+  checkSensorStatus();
 
-  if (doorValue != lastDoorValue)
-  {
-    Homie.getLogger() << "Door is now " << (doorValue ? "open" : "closed") << endl;
-
-    doorNode.setProperty("open").send(doorValue ? "true" : "false");
-    lastDoorValue = doorValue;
-  }
-  if (waterValue != lastWaterValue)
-  {
-    Homie.getLogger() << "Water sensor state is " << (waterValue ? "Leak Detected" : "clear") << endl;
-
-    waterNode.setProperty("clear").send(waterValue ? "true" : "false");
-    lastWaterValue = waterValue;
-  }
-
-  if ((RELAY_OPEN && !lastDoorValue) || (RELAY_CLOSE && !lastWaterValue))
+  if ((RELAY_OPEN && !getDoorState()) || (RELAY_CLOSE && !getwaterState()))
   {
     if (RELAY_OPEN)
     {
@@ -60,11 +42,8 @@ void loopHandler()
 
 void advertiseSetup()
 {
-  doorNode.advertise("open");
-  waterNode.advertise("clear");
-  shutterOpenNode.advertise("on").setName("On").setDatatype("boolean").settable(RelayOpenOnHandler);
-  shutterCloseNode.advertise("on").setName("On").setDatatype("boolean").settable(RelayCloseOnHandler);
-  abortNode.advertise("on").setName("On").setDatatype("boolean").settable(AbortRelayOnHandler);
+  sensorAdvertiseSetup();
+  TVRackAdvertiseSetup();
   if (bleremote)
   {
     //TODO Set the advertise or the function for this
@@ -72,7 +51,7 @@ void advertiseSetup()
 }
 void setup()
 {
-  // EEPROM.begin(4);
+  EEPROM.begin(16);
 
   Serial.begin(115200);
   Serial << endl

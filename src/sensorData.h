@@ -24,3 +24,49 @@ void sensorSetup()
     debouncer_door.interval(50);
     debouncer_water.interval(50);
 }
+
+void checkDoorsensorState()
+{
+    int doorValue = debouncer_door.read();
+
+    if (doorValue != lastDoorValue)
+    {
+        Homie.getLogger() << "Door is now " << (doorValue ? "open" : "closed") << endl;
+
+        doorNode.setProperty("open").send(doorValue ? "true" : "false");
+        lastDoorValue = doorValue;
+    }
+}
+void checkWatersensorState()
+{
+    int waterValue = debouncer_water.read();
+
+    if (waterValue != lastWaterValue)
+    {
+        Homie.getLogger() << "Water sensor state is " << (waterValue ? "Leak Detected" : "clear") << endl;
+
+        waterNode.setProperty("clear").send(waterValue ? "true" : "false");
+        lastWaterValue = waterValue;
+    }
+}
+void checkSensorStatus()
+{
+    checkDoorsensorState();
+    checkWatersensorState();
+}
+
+bool getDoorState()
+{
+    return lastDoorValue;
+}
+
+bool getwaterState()
+{
+    return lastWaterValue;
+}
+
+void sensorAdvertiseSetup()
+{
+    doorNode.advertise("open");
+    waterNode.advertise("clear");
+}
